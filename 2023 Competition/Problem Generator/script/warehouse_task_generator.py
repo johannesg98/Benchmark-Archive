@@ -74,7 +74,34 @@ class WarehouseTaskGenerator:
                 task=np.random.choice(s_locations)
             tasks.append(task)
         return tasks
+    
+    def random_generate_multierrand(self,taskNum,map_name,task_type_rl=[0.5,0.5], errandNum=1):
+        e_locations,s_locations,rows,cols=self.read_maps(map_name)
+        tasks=[]
+        for i in range(taskNum):
+            task = []
+            for j in range(errandNum):
+                #determine if the errand is E or S
+                prob=np.random.random()
+                if prob<task_type_rl[0]:
+                    errand=np.random.choice(e_locations)
+                else:
+                    errand=np.random.choice(s_locations)
+                task.append(errand)
+            tasks.append(task)
+        return tasks
 
+    def generate_txt_multierrand(self, tasks:List,file_name:str):
+        with open(file_name,"w") as file:
+            file.write(str(len(tasks))+"\n")
+            for task in tasks:
+                for i,errand in enumerate(task):
+                    file.write(str(errand))
+                    if i < len(task) - 1:
+                        file.write(",")
+                    else:
+                        file.write("\n")
+        print("successfully saved as",file_name)
 
     def generate_txt(self, tasks:List,file_name:str):
         with open(file_name,"w") as file:
@@ -184,6 +211,9 @@ def parse_arguments():
     # parser.add_argument('--team_size',type=int, default=10,help="team size")
     # parser.add_argument('--num_agents',type=int, default=1000,help="agents file")
     # parser.add_argument('--tasks_reveal',type=int, default=1,help="num of tasks reveal")
+    parser.add_argument('--errandNum', type=int, default=1, help='Number of errands per task(>=1)')
+
+
 
 
 
@@ -203,17 +233,25 @@ def print_info(args):
     print(f"--task_type_rl: {args.task_type_rl} (Description: Relative likelihood of selecting an E or an S location.)")
     print(f"--taskFile: {args.taskFile} (Description: Name of the output file.)")
     print(f"--m_buckets: {args.m_buckets} (Description: Number of the buckets.)")
+    print(f"--errandNum: {args.errandNum} (Description: Number of errands per task.)")
 
 
 
 if __name__=="__main__":
     args=parse_arguments()
     TG=WarehouseTaskGenerator()
-    if args.m_buckets==-1:
-        tasks=TG.random_generate(args.taskNum,args.mapFile,args.task_type_rl)
+    if args.errandNum == 1:
+        if args.m_buckets==-1:
+            tasks=TG.random_generate(args.taskNum,args.mapFile,args.task_type_rl)
+        else:
+            tasks=TG.distribute_generate(args.taskNum,args.mapFile,args.m_buckets)
+        TG.generate_txt(tasks,args.taskFile)
     else:
-        tasks=TG.distribute_generate(args.taskNum,args.mapFile,args.m_buckets)
-    TG.generate_txt(tasks,args.taskFile)
+        if args.m_buckets==-1:
+            tasks=TG.random_generate_multierrand(args.taskNum,args.mapFile,args.task_type_rl,args.errandNum)
+        else:
+            print("ERROR: multiy bucket for multiple errands not implemented yet")
+        TG.generate_txt_multierrand(tasks,args.taskFile)
     # generate_agents(args.num_agents,args.map,args.agents)
     # generate_problem(args.map,args.agents,args.team_size,args.output,args.tasks_reveal,args.problem)
     pass
@@ -221,5 +259,5 @@ if __name__=="__main__":
 
 '''
 example
- python3 ./script/task_generator.py --map ./warehouse.domain/maps/warehouse_large.map  --taskNum 100 --taskFile ./tasks.tasks --m_buckets 5
+ python3 ./script/warehouse_task_generator.py --map ./warehouse.domain/maps/warehouse_large.map  --taskNum 100 --taskFile ./tasks.tasks --m_buckets 5
 '''
