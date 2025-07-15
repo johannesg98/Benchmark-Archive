@@ -1,14 +1,14 @@
-mapWidth: 19
-mapHeight: 18
-output: "../myWorld/warehouse_1x1.map"
+mapWidth: 103
+mapHeight: 52
+output: "../myWorld/warehouse_24x15.map"
 stationConfig: "picking_station.txt"
 stationNumber: 1000
 storageSize: [3,2]  # (width, height)
 stationDistance: 2     # distance between two consecutive emitters
 corridorWidth: 1    # distance between two storage blocks
-pillarWidth: 4  # width of the pillar
-operWidth: 5  # distance between the pickup station and the storage area
+pillarWidth: 3  # width of the pillar
+operWidth: 1  # distance between the pickup station and the storage area
 
-#for m,n (width,height) gird:
-#width = 16 + m * 4 - 1
-#height = 16 + n * 3 - 1
+#for m,n (width,height) grid:
+#width = 8 + m * 4 - 1
+#height = 8 + n * 3 - 1

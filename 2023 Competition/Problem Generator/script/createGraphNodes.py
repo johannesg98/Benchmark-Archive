@@ -169,6 +169,7 @@ class GraphCreator:
             file.write("height "+str(self.rows)+"\n")
             file.write("width "+str(self.cols)+"\n")
             file.write("nNodes "+str(len(self.nodes))+"\n")
+            file.write("nInnerNodes "+str(len(self.innerNodes))+"\n")
             file.write(",".join(str(node) for node in self.nodes) + "\n")
             for x in range(len(self.regions)):
                 file.write(",".join(str(elem) for elem in self.regions[x]) + "\n")
