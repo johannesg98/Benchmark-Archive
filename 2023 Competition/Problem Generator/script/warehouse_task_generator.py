@@ -56,7 +56,7 @@ class WarehouseTaskGenerator:
             rows,cols=int(lines[1].split()[1]), int(lines[2].split()[1])
             for x, line in enumerate(lines[4:]):
                 for y, char in enumerate(line.strip()):
-                    if char != "@":
+                    if char != "@" and char != "T":
                         traversable.append(self.get_loc_id(x,y,rows,cols))
 
         return traversable

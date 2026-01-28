@@ -1,0 +1,8 @@
+{
+    "mapFile": "maps/room_32_32_4.map",
+    "agentFile": "agents/room_32_32_4_682.agents",
+    "teamSize": 682,
+    "taskFile": "tasks/room_32_32_4.tasks",
+    "numTasksReveal": 1.5,
+    "version": "2024 LoRR"
+}

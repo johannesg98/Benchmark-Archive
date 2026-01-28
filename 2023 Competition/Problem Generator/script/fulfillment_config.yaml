@@ -1,6 +1,6 @@
-mapWidth: 103
-mapHeight: 52
-output: "../myWorld/warehouse_24x15.map"
+mapWidth: 199
+mapHeight: 130
+output: "../myWorld/warehouse_48x41.map"
 stationConfig: "picking_station.txt"
 stationNumber: 1000
 storageSize: [3,2]  # (width, height)

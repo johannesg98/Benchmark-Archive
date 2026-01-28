@@ -130,6 +130,7 @@ class GraphCreator:
                         self.AdjMatrix[num_inner_nodes + n_out][n_inn] = 1
                         self.AdjMatrix[n_inn][num_inner_nodes + n_out] = 1
 
+
     def overwriteNodeLocationsWithRegionCenter(self):
         for i in range(len(self.nodes)):
             x_list = []
@@ -150,6 +151,7 @@ class GraphCreator:
             else:
                 print(f"New region center for node {i} is out of map, new center not set")
     
+
     def printNodeCheckMap(self, file):
         checkMap = self.map.copy()
         for x in range(len(checkMap)):
@@ -182,15 +184,169 @@ class GraphCreator:
         print("successfully saved as",args.outputFile)
 
 
+
+    # additional stuff for uniform node placement in non-warehouse maps
+
+    def getUniformNodes(self):
+        self.nodes = []
+        for x in range(2, self.rows-1, 3):
+            for y in range(2, self.cols-1, 3):
+                if self.checkIfRegionAroundNodeNotFullyOccupied(x, y):
+                    self.nodes.append(self.get_loc_id(x, y))
+        self.innerNodes = self.nodes
     
 
+    def checkIfRegionAroundNodeNotFullyOccupied(self, x, y):
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < self.rows and 0 <= ny < self.cols:
+                    if self.map[nx][ny] != "@" and self.map[nx][ny] != "T":
+                        return True
+        return False
+    
+    def overwriteBlockedNodeLocations(self):
+        for i in range(len(self.nodes)):
+            loc_id = self.nodes[i]
+            x, y = self.get_loc_xy(loc_id)
+            if self.map[x][y] == "@" or self.map[x][y] == "T":
+                for step in [-1, 1, -self.cols, self.cols, -self.cols-1, -self.cols+1, self.cols-1, self.cols+1]:
+                    neighbor_loc = loc_id + step
+                    if 0 <= neighbor_loc < self.rows * self.cols:
+                        nx, ny = self.get_loc_xy(neighbor_loc)
+                        if self.map[nx][ny] != "@" and self.map[nx][ny] != "T":
+                            self.nodes[i] = neighbor_loc
+                            break
+    
 
+    def createAstarAdjacenyMatrix(self, maxDistance=4):
+        self.AdjMatrix = []
+        matrix_size = len(self.nodes)
 
+        for i in range(matrix_size):
+            self.AdjMatrix.append([0] * matrix_size)
+
+        for i in range(matrix_size):
+            reachable_locs = self.collectLocsInReach(self.nodes[i], maxDistance)
+            for j in range(matrix_size):
+                if self.nodes[j] in reachable_locs:
+                    self.AdjMatrix[i][j] = 1
+
+    def collectLocsInReach(self, start_loc_id, max_distance):
+        visited = {start_loc_id: 0}
+        queue = set([start_loc_id])
+        while queue:
+            current_loc = queue.pop()
+            x, y = self.get_loc_xy(current_loc)
+            current_distance = visited[current_loc]
+            if current_distance < max_distance:
+                for dx,dy in [(-1,0),(1,0),(0,-1),(0,1)]:
+                    nx, ny = x + dx, y + dy
+                    if  0 <= nx < self.rows and 0 <= ny < self.cols:
+                        if self.map[nx][ny] != "@" and self.map[nx][ny] != "T":
+                            neighbor_loc = self.get_loc_id(nx, ny)
+                            if neighbor_loc not in visited or visited[neighbor_loc] > current_distance + 1:
+                                visited[neighbor_loc] = current_distance + 1
+                                queue.add(neighbor_loc)
+        return [loc for loc in visited]
+    
+
+    def getRoomNodes(self, roomSize):
+        self.nodes = []
+        if roomSize % 2 == 0:
+            halfSize = roomSize // 2
+            posSteps = [i for i in range(-halfSize+1, halfSize+1)]
+        else:
+            halfSize = roomSize // 2
+            posSteps = [i for i in range(-halfSize, halfSize + 1)]
+        for x in range(0, self.rows):
+            for y in range(0, self.cols):
+                if self.map[x][y] != "@" and self.map[x][y] != "T":
+                    isCenter = True
+                    for dx in posSteps:
+                        for dy in posSteps:
+                            nx, ny = x + dx, y + dy
+                            if 0 <= nx < self.rows and 0 <= ny < self.cols:
+                                if self.map[nx][ny] == "@" or self.map[nx][ny] == "T":
+                                    isCenter = False
+                            else:
+                                isCenter = False
+                    if isCenter:
+                        self.nodes.append(self.get_loc_id(x, y))
+        
+        self.innerNodes = self.nodes
+
+    def getManualNodes(self):
+        self.nodes = []
+        for x in range(self.rows):
+            for y in range(self.cols):
+                if self.map[x][y] == "X":
+                    self.nodes.append(self.get_loc_id(x,y))
+        self.innerNodes = self.nodes
+
+    def assignAstarRegions(self):
+        from tqdm import tqdm
+        self.regions = []
+        currentId = 0
+        for x in tqdm(range(self.rows), desc="Assigning A* regions for each row"):
+            self.regions.append([])
+            for y in range(self.cols):
+                if self.map[x][y] != "@" and self.map[x][y] != "T":
+                    minIdx = -1
+                    minDist = 99999999
+                    for nodeIdx in range(len(self.nodes)):
+                        dist = self.astar_distance(currentId, self.nodes[nodeIdx], limit=minDist)
+                        if dist != -1 and dist < minDist:
+                            minIdx = nodeIdx
+                            minDist = dist
+                    if minIdx != -1:
+                        self.regions[x].append(minIdx)
+                    else:
+                        self.regions[x].append(-1)
+                else:
+                    self.regions[x].append(-1)
+                currentId += 1
+
+    def astar_distance(self, start_loc_id, goal_loc_id, limit=1000):
+        from queue import PriorityQueue
+
+        open_set = PriorityQueue()
+        open_set.put((0, start_loc_id))
+        came_from = {}
+        g_score = {start_loc_id: 0}
+        f_score = {start_loc_id: self.manhattan_dist(start_loc_id, goal_loc_id)}
+
+        while not open_set.empty():
+            current = open_set.get()[1]
+
+            if current == goal_loc_id:
+                return g_score[current]
+            
+            if g_score[current] > limit:
+                return -1
+
+            x, y = self.get_loc_xy(current)
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < self.rows and 0 <= ny < self.cols:
+                    if self.map[nx][ny] != "@" and self.map[nx][ny] != "T":
+                        neighbor_loc = self.get_loc_id(nx, ny)
+                        tentative_g_score = g_score[current] + 1
+
+                        if neighbor_loc not in g_score or tentative_g_score < g_score[neighbor_loc]:
+                            came_from[neighbor_loc] = current
+                            g_score[neighbor_loc] = tentative_g_score
+                            f_score[neighbor_loc] = tentative_g_score + self.manhattan_dist(neighbor_loc, goal_loc_id)
+                            open_set.put((f_score[neighbor_loc], neighbor_loc))
+
+        print(f"No path found from {start_loc_id} to {goal_loc_id}")
+        return -1  # Return -1 if there is no path found
 
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Script Parameters')
+    parser.add_argument('--mapType', help='Type of map e.g. warehouse, random, manual', default="warehouse")
     parser.add_argument('--mapFile', help='Map file name', required=True)
     parser.add_argument('--outputFile', help='Output file name', default="nodes.nodes")
     parser.add_argument('--centerNodes', help='Adjusts the node locations to the center of their regions', action='store_true')
@@ -199,19 +355,54 @@ def parse_arguments():
     parser.add_argument('--stationDistance', help='Number of empty fields between the picking stations. For the current setup we almost always use 2. (See fullfillment_config.yaml)', default=2)
     parser.add_argument('--adjMatrixDistance', help='If the distance between two nodes is <= adjMatrixDistance, they are connected by an edge. For Obstacles with size 3x2 -> default value 4 makes sense.', default=4)
     parser.add_argument('--adjMatrixDistanceOuterCircle', help='Max distance for the nodes on the outer circle. 10 is good. Should not connect nonadjacent stations -> no circle anymore.', default=10)
+    parser.add_argument('--roomSize', help='Size of rooms for room type maps, e.g., 5 for 5x5 rooms, somehowe the map naming is 32_32_4 -> roomsize = 4-1 = 3.', default=3)
 
     args = parser.parse_args()
     return args
 
-# python3 script/createGraphNodes.py --mapFile "myWorld/warehouse_4x3.map" --outputFile "myWorld/warehouse_4x3_withOuter.nodes" --createOuterNodes --includeCheckMap
+
 if __name__=="__main__":
     args=parse_arguments()
+
     GC = GraphCreator(args.mapFile)
-    GC.getInnerNodes()
-    if args.createOuterNodes:
-        GC.getOuterNodes(args.stationDistance)
-    GC.assignRegions()
-    GC.createAdjacenyMatrix(args.createOuterNodes, args.adjMatrixDistance, args.adjMatrixDistanceOuterCircle)
-    if args.centerNodes:
-        GC.overwriteNodeLocationsWithRegionCenter()
-    GC.saveInFile(args)
+
+    # python3 script/createGraphNodes.py --mapFile "myWorld/warehouse_4x3.map" --outputFile "myWorld/warehouse_4x3_withOuter.nodes" --createOuterNodes --includeCheckMap
+    if args.mapType == "warehouse":   
+        GC.getInnerNodes()
+        if args.createOuterNodes:
+            GC.getOuterNodes(args.stationDistance)
+        GC.assignRegions()
+        GC.createAdjacenyMatrix(args.createOuterNodes, args.adjMatrixDistance, args.adjMatrixDistanceOuterCircle)
+        if args.centerNodes:
+            GC.overwriteNodeLocationsWithRegionCenter()
+        GC.saveInFile(args)
+
+    # python3 script/createGraphNodes.py --mapFile "myWorld/warehouse_4x3.map" --outputFile "myWorld/warehouse_4x3.nodes" --includeCheckMap --mapType "random" --adjMatrixDistance 4
+    elif args.mapType == "random":
+        GC.getUniformNodes()
+        GC.assignRegions()
+        GC.overwriteBlockedNodeLocations()
+        GC.createAstarAdjacenyMatrix(int(args.adjMatrixDistance))
+        GC.saveInFile(args)
+
+    # python3 script/createGraphNodes.py --mapFile "myWorld/warehouse_4x3.map" --outputFile "myWorld/warehouse_4x3.nodes" --includeCheckMap --mapType "room" --roomSize 3 --adjMatrixDistance 6
+    elif args.mapType == "room":
+        GC.getRoomNodes(int(args.roomSize))
+        GC.assignRegions()
+        GC.createAstarAdjacenyMatrix(int(args.adjMatrixDistance))
+        GC.saveInFile(args)
+
+    # python3 script/createGraphNodes.py --mapFile "myWorld/warehouse_4x3.map" --outputFile "myWorld/warehouse_4x3.nodes" --includeCheckMap --mapType "room" --adjMatrixDistance 9
+    elif args.mapType == "manual":
+        GC.getManualNodes()
+        GC.assignAstarRegions()
+        GC.createAstarAdjacenyMatrix(int(args.adjMatrixDistance))
+        GC.saveInFile(args)
+
+
+
+    else:
+        logging.error("\nMap type not recognized!")
+        sys.exit()
+
+    
